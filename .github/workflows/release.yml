@@ -21,6 +21,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
+          components: clippy
       
       - name: Cache Cargo registry
         uses: actions/cache@v4
