@@ -1,0 +1,25 @@
+[package]
+name = "bitbucket-mcp"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tokio = { version = "1.41", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+napi = "2.16"
+napi-derive = "2.16"
+base64 = "0.22"
+anyhow = "1.0"
+rmcp = { version = "0.16", features = ["server", "transport-io"] }
+
+[build-dependencies]
+napi-build = "2.1"
+
+[profile.release]
+lto = true
+strip = true

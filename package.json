@@ -1,0 +1,40 @@
+{
+  "name": "@bitbucket-mcp/server",
+  "version": "0.1.0",
+  "description": "Bitbucket MCP server - Model Context Protocol integration for Bitbucket",
+  "main": "index.js",
+  "bin": {
+    "bitbucket-mcp": "./index.js"
+  },
+  "scripts": {
+    "build": "cargo build --release",
+    "test": "cargo test",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "bitbucket",
+    "model-context-protocol",
+    "ai",
+    "llm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "index.js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "optionalDependencies": {
+    "@bitbucket-mcp/darwin-x64": "0.1.0",
+    "@bitbucket-mcp/darwin-arm64": "0.1.0",
+    "@bitbucket-mcp/linux-x64-gnu": "0.1.0",
+    "@bitbucket-mcp/linux-arm64-gnu": "0.1.0",
+    "@bitbucket-mcp/win32-x64": "0.1.0"
+  }
+}

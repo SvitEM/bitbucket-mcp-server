@@ -1,0 +1,230 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: "1.94.0"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      
+      - name: Run cargo audit
+        run: cargo audit
+      
+      - name: Run tests
+        run: cargo test
+      
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin-x64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            binary: bitbucket-mcp
+            artifact_name: bitbucket-mcp-darwin-x64
+          - platform: darwin-arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            binary: bitbucket-mcp
+            artifact_name: bitbucket-mcp-darwin-arm64
+          
+          # Linux
+          - platform: linux-x64-gnu
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: bitbucket-mcp
+            artifact_name: bitbucket-mcp-linux-x64-gnu
+          - platform: linux-arm64-gnu
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary: bitbucket-mcp
+            artifact_name: bitbucket-mcp-linux-arm64-gnu
+          
+          # Windows
+          - platform: win32-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: bitbucket-mcp.exe
+            artifact_name: bitbucket-mcp-win32-x64
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.target }}
+      
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+      
+      - name: Install cross (for ARM Linux)
+        if: matrix.platform == 'linux-arm64-gnu'
+        run: cargo install cross --git https://github.com/cross-rs/cross
+      
+      - name: Build (cross for ARM Linux)
+        if: matrix.platform == 'linux-arm64-gnu'
+        run: cross build --release --target ${{ matrix.target }}
+      
+      - name: Build (native for other platforms)
+        if: matrix.platform != 'linux-arm64-gnu'
+        run: cargo build --release --target ${{ matrix.target }}
+      
+      - name: Prepare artifact directory
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} dist/
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/*
+          retention-days: 30
+
+  # Create universal macOS binary (optional)
+  build-macos-universal:
+    needs: [build]
+    runs-on: macos-latest
+    if: github.event_name == 'release'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Create universal binary
+        run: |
+          mkdir -p dist
+          lipo -create \
+            artifacts/bitbucket-mcp-darwin-x64/bitbucket-mcp \
+            artifacts/bitbucket-mcp-darwin-arm64/bitbucket-mcp \
+            -output dist/bitbucket-mcp-darwin-universal
+      
+      - name: Upload universal binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitbucket-mcp-darwin-universal
+          path: dist/*
+          retention-days: 30
+
+  # Attach binaries to GitHub Release
+  attach-to-release:
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Prepare binaries for release
+        run: |
+          cd artifacts
+          for dir in */; do
+            cd "$dir"
+            # Rename binary to include platform
+            if [ -f "bitbucket-mcp" ]; then
+              mv bitbucket-mcp bitbucket-mcp-$(basename "$dir")
+            elif [ -f "bitbucket-mcp.exe" ]; then
+              mv bitbucket-mcp.exe bitbucket-mcp-$(basename "$dir").exe
+            fi
+            cd ..
+          done
+      
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/*/bitbucket-mcp*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Publish to npm (only on release)
+  publish-npm:
+    needs: [build]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Copy binaries to artifact directories
+        run: |
+          mkdir -p artifacts/darwin-x64
+          mkdir -p artifacts/darwin-arm64
+          mkdir -p artifacts/linux-x64-gnu
+          mkdir -p artifacts/linux-arm64-gnu
+          mkdir -p artifacts/win32-x64
+          
+          cp artifacts/bitbucket-mcp-darwin-x64/bitbucket-mcp artifacts/darwin-x64/
+          cp artifacts/bitbucket-mcp-darwin-arm64/bitbucket-mcp artifacts/darwin-arm64/
+          cp artifacts/bitbucket-mcp-linux-x64-gnu/bitbucket-mcp artifacts/linux-x64-gnu/
+          cp artifacts/bitbucket-mcp-linux-arm64-gnu/bitbucket-mcp artifacts/linux-arm64-gnu/
+          cp artifacts/bitbucket-mcp-win32-x64/bitbucket-mcp.exe artifacts/win32-x64/
+      
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
