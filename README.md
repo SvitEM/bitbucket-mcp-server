@@ -241,8 +241,9 @@ ENTRYPOINT ["/bitbucket-mcp"]
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `BITBUCKET_BASE_URL` | **Yes** | - | Bitbucket Server base URL |
-| `BITBUCKET_USERNAME` | **Yes** | - | Username for Basic Auth |
-| `BITBUCKET_PASSWORD` | **Yes** | - | Password or PAT |
+| `BITBUCKET_API_KEY` | No | - | API Key / PAT for Bearer token authentication (has priority over Basic Auth) |
+| `BITBUCKET_USERNAME` | **Yes** | - | Username for Basic Auth (ignored if BITBUCKET_API_KEY is set) |
+| `BITBUCKET_PASSWORD` | **Yes** | - | Password or PAT for Basic authentication (ignored if BITBUCKET_API_KEY is set) |
 | `BITBUCKET_SSL_VERIFY` | No | `true` | SSL certificate verification |
 | `BITBUCKET_ALLOW_READ` | No | `true` | Allow read operations |
 | `BITBUCKET_ALLOW_WRITE` | No | `true` | Allow write operations |
@@ -421,6 +422,72 @@ cargo test
 # Security audit
 cargo audit
 ```
+
+---
+
+## 🔄 CI/CD & Automated Releases
+
+### Automatic Versioning
+
+При каждом коммите в ветку `main` автоматически:
+
+1. **Dependabot** обновляет зависимости (еженедельно по понедельникам)
+2. **Создается новый тег** с инкрементом patch-версии (v0.1.0 → v0.1.1)
+3. **Генерируется changelog** на основе Conventional Commits
+4. **Публикуется GitHub Release** с бинарниками для всех платформ
+5. **Публикация в npm** (при наличии токена `NPM_TOKEN`)
+
+### Conventional Commits
+
+Используйте формат коммитов для автоматического определения типа изменений:
+
+```bash
+# Новые функции (minor version)
+git commit -m "feat: add branch comparison tool"
+
+# Исправления (patch version)
+git commit -m "fix: handle SSL certificate errors"
+
+# Обновления зависимостей (patch version)
+git commit -m "deps: update tokio to 1.42"
+
+# Документация (не создает релиз)
+git commit -m "docs: update README examples"
+```
+
+### Workflow Overview
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Push to main   │────▶│  auto-release.yml│────▶│  Create tag     │
+│  (non-.md)      │     │                  │     │  (v0.1.0→0.1.1) │
+└─────────────────┘     └──────────────────┘     └────────┬────────┘
+                                                          │
+┌─────────────────┐     ┌──────────────────┐     ┌────────▼────────┐
+│  npm Publish    │◀────│  release.yml     │◀────│  GitHub Release │
+│                 │     │  Build & Test    │     │  + Changelog    │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+```
+
+### Required Secrets
+
+Настройте secrets в GitHub Repository Settings → Secrets → Actions:
+
+| Secret | Description | Required |
+|--------|-------------|----------|
+| `GITHUB_TOKEN` | Автоматически создается GitHub | ✅ Yes |
+| `NPM_TOKEN` | Токен для публикации в npm | ❌ Optional |
+
+### Dependabot Configuration
+
+Dependabot автоматически обновляет:
+- **Rust зависимости** (Cargo.toml) — еженедельно
+- **npm зависимости** (package.json) — еженедельно  
+- **GitHub Actions** — еженедельно
+
+Все обновления создаются как Pull Request с лейблами:
+- `dependencies` + `rust` / `javascript` / `ci/cd`
+- Группированные обновления для minor/patch версий
 
 ---
 

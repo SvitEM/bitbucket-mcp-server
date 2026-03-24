@@ -90,12 +90,16 @@ impl PermissionChecker {
 mod tests {
     use super::*;
     use crate::types::BitbucketConfig;
+    use crate::auth::AuthMethod;
+    use secrecy::SecretString;
 
     fn create_test_config(allow_read: bool, allow_write: bool, allow_delete: bool) -> BitbucketConfig {
         BitbucketConfig {
             base_url: "https://test.com".to_string(),
-            username: "test".to_string(),
-            password: "test".to_string(),
+            auth: AuthMethod::Basic {
+                username: "test".to_string(),
+                password: SecretString::from("test".to_string()),
+            },
             verify_ssl: true,
             allow_read,
             allow_write,

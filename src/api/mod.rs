@@ -6,7 +6,6 @@ pub mod pull_requests;
 pub mod commits;
 pub mod files;
 
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use crate::types::BitbucketConfig;
 use error::ApiError;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
@@ -21,7 +20,7 @@ pub struct BitbucketClient {
 impl BitbucketClient {
     /// Creates a new Bitbucket API client with the given configuration
     pub fn new(config: BitbucketConfig) -> Result<Self, ApiError> {
-        let auth_header = Self::build_auth_header(&config.username, &config.password);
+        let auth_header = config.auth.to_header_value();
         
         let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(!config.verify_ssl)
@@ -32,14 +31,6 @@ impl BitbucketClient {
             base_url: config.base_url.trim_end_matches('/').to_string(),
             auth_header,
         })
-    }
-    
-    /// Generates HTTP Basic Auth header from username and password
-    /// Format: "Basic base64(username:password)"
-    pub fn build_auth_header(username: &str, password: &str) -> String {
-        let credentials = format!("{}:{}", username, password);
-        let encoded = BASE64.encode(credentials.as_bytes());
-        format!("Basic {}", encoded)
     }
     
     /// Builds a full API URL from a relative path
@@ -81,31 +72,17 @@ impl BitbucketClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    #[test]
-    fn test_basic_auth_header() {
-        let header = BitbucketClient::build_auth_header("testuser", "testpass");
-        assert!(header.starts_with("Basic "));
-        assert_eq!(header, "Basic dGVzdHVzZXI6dGVzdHBhc3M=");
-    }
-    
-    #[test]
-    fn test_basic_auth_special_chars() {
-        let header = BitbucketClient::build_auth_header("user@example.com", "p@ss:word!");
-        assert!(header.starts_with("Basic "));
-        
-        let encoded = header.strip_prefix("Basic ").unwrap();
-        let decoded = BASE64.decode(encoded).unwrap();
-        let decoded_str = String::from_utf8(decoded).unwrap();
-        assert_eq!(decoded_str, "user@example.com:p@ss:word!");
-    }
+    use crate::auth::AuthMethod;
+    use secrecy::SecretString;
     
     #[test]
     fn test_build_url() {
         let config = BitbucketConfig {
             base_url: "https://bitbucket.example.com".to_string(),
-            username: "test".to_string(),
-            password: "test".to_string(),
+            auth: AuthMethod::Basic {
+                username: "test".to_string(),
+                password: SecretString::from("test".to_string()),
+            },
             verify_ssl: true,
             allow_read: true,
             allow_write: true,
@@ -129,8 +106,10 @@ mod tests {
     fn test_build_url_trailing_slash() {
         let config = BitbucketConfig {
             base_url: "https://bitbucket.example.com/".to_string(),
-            username: "test".to_string(),
-            password: "test".to_string(),
+            auth: AuthMethod::Basic {
+                username: "test".to_string(),
+                password: SecretString::from("test".to_string()),
+            },
             verify_ssl: true,
             allow_read: true,
             allow_write: true,
@@ -148,8 +127,10 @@ mod tests {
     fn test_client_creation() {
         let config = BitbucketConfig {
             base_url: "https://bitbucket.example.com".to_string(),
-            username: "testuser".to_string(),
-            password: "testpass".to_string(),
+            auth: AuthMethod::Basic {
+                username: "testuser".to_string(),
+                password: SecretString::from("testpass".to_string()),
+            },
             verify_ssl: true,
             allow_read: true,
             allow_write: true,
@@ -164,8 +145,10 @@ mod tests {
     fn test_paginated_url() {
         let config = BitbucketConfig {
             base_url: "https://bitbucket.example.com".to_string(),
-            username: "test".to_string(),
-            password: "test".to_string(),
+            auth: AuthMethod::Basic {
+                username: "test".to_string(),
+                password: SecretString::from("test".to_string()),
+            },
             verify_ssl: true,
             allow_read: true,
             allow_write: true,
