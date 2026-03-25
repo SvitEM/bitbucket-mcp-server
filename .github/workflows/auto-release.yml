@@ -55,7 +55,7 @@ jobs:
       
       - name: Generate changelog
         id: changelog
-        uses: mikepenz/release-changelog-builder-action@v4
+        uses: mikepenz/release-changelog-builder-action@v6
         with:
           fromTag: "${{ steps.last_tag.outputs.last_tag }}"
           toTag: "${{ steps.new_version.outputs.new_tag }}"
