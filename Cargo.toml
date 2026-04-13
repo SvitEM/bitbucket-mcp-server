@@ -15,7 +15,7 @@ napi = "2.16"
 napi-derive = "2.16"
 base64 = "0.22"
 anyhow = "1.0"
-rmcp = { version = "0.16", features = ["server", "transport-io"] }
+rmcp = { version = "1.4", features = ["server", "transport-io"] }
 secrecy = "0.8"
 zeroize = "1.8"
 
